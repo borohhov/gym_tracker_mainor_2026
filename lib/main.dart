@@ -4,6 +4,7 @@ import 'package:gym_tracker/views/home.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     ChangeNotifierProvider(
       create: (BuildContext context) {
