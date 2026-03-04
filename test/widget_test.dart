@@ -17,7 +17,7 @@ void main() {
       ExerciseLog(DateTime.now(), defaultExercises.first, [
         ExerciseSet(8, 40),
         ExerciseSet(8, 45),
-      ]),
+      ], id: 1),
     ]);
 
     await tester.pumpWidget(
@@ -51,7 +51,19 @@ class _FakePersistence implements Persistence {
   Future<void> init() async {}
 
   @override
-  Future<void> saveLog(ExerciseLog log) async {
+  Future<int?> saveLog(ExerciseLog log) async {
+    final nextId = _logs.isEmpty ? 1 : (_logs.last.id ?? 0) + 1;
+    log.id = nextId;
     _logs.add(log);
+    return nextId;
+  }
+
+  @override
+  Future<void> addSet(int logId, ExerciseSet set) async {
+    final matchingLog = _logs.where((entry) => entry.id == logId);
+    if (matchingLog.isEmpty) {
+      return;
+    }
+    matchingLog.first.sets.add(set);
   }
 }

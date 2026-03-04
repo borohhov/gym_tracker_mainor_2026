@@ -94,8 +94,8 @@ class HomeScreen extends StatelessWidget {
                           ? const _EmptyStateCard()
                           : ExerciseLogListWidget(
                               exerciseLog: items,
-                              onAddSetPressed: (exerciseName) {
-                                _showAddSetComingSoon(context, exerciseName);
+                              onAddSetPressed: (log) {
+                                _showAddSetDialog(context, log);
                               },
                             ),
                     ),
@@ -177,13 +177,101 @@ class HomeScreen extends StatelessWidget {
     return value;
   }
 
-  void _showAddSetComingSoon(BuildContext context, String exerciseName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Set editing for $exerciseName is coming soon.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _showAddSetDialog(BuildContext context, ExerciseLog log) async {
+    final logId = log.id;
+    if (logId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot add set for this exercise yet.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final formKey = GlobalKey<FormState>();
+    final repsController = TextEditingController();
+    final weightController = TextEditingController();
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: Text('Add Set - ${log.exercise.name}'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Reps'),
+                    keyboardType: TextInputType.number,
+                    controller: repsController,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter reps';
+                      }
+                      final reps = int.tryParse(value.trim());
+                      if (reps == null || reps <= 0) {
+                        return 'Reps must be a positive number';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Weight (kg)'),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    controller: weightController,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter weight';
+                      }
+                      final weight = num.tryParse(value.trim());
+                      if (weight == null || weight < 0) {
+                        return 'Weight must be 0 or more';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) {
+                    return;
+                  }
+                  final reps = int.parse(repsController.text.trim());
+                  final weight = num.parse(weightController.text.trim());
+                  await dialogContext.read<ExerciseLogProvider>().addSet(
+                    logId,
+                    ExerciseSet(reps, weight),
+                  );
+
+                  if (!dialogContext.mounted) {
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text('Save Set'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      repsController.dispose();
+      weightController.dispose();
+    }
   }
 }
 

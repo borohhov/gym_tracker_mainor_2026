@@ -10,7 +10,7 @@ class ExerciseLogListWidget extends StatelessWidget {
   });
 
   final List<ExerciseLog> exerciseLog;
-  final ValueChanged<String> onAddSetPressed;
+  final ValueChanged<ExerciseLog> onAddSetPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +51,7 @@ class ExerciseLogListWidget extends StatelessWidget {
                       ),
                     ),
                     TextButton.icon(
-                      onPressed: () => onAddSetPressed(exLog.exercise.name),
+                      onPressed: () => onAddSetPressed(exLog),
                       icon: Icon(
                         Icons.add_rounded,
                         color: appColors.accent,

@@ -9,8 +9,14 @@ class ExerciseLogProvider extends ChangeNotifier {
   /// Adds [item] to the log. This and [removeAll] are the only ways to modify the
   /// cart from the outside.
   Future<void> add(ExerciseLog item) async {
-    await dataSource.saveLog(item);
+    final logId = await dataSource.saveLog(item);
+    item.id = logId;
     // This call tells the widgets that are listening to this model to rebuild.
+    notifyListeners();
+  }
+
+  Future<void> addSet(int logId, ExerciseSet set) async {
+    await dataSource.addSet(logId, set);
     notifyListeners();
   }
 

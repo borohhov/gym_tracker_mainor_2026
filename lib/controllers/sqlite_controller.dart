@@ -7,9 +7,10 @@ import 'package:sqflite/sqflite.dart';
 
 class SqliteController implements Persistence {
   static const _dbName = 'gym_tracker.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
   static const _logsTable = 'exercise_logs';
   static const _setsTable = 'exercise_sets';
+  static const _setsOrderIndex = 'idx_exercise_sets_log_id_set_order';
 
   Future<Database>? _databaseFuture;
 
@@ -20,29 +21,64 @@ class SqliteController implements Persistence {
   }
 
   @override
-  Future<void> saveLog(ExerciseLog log) async {
+  Future<int?> saveLog(ExerciseLog log) async {
     final db = await _database();
     try {
+      int? logId;
       await db.transaction((txn) async {
-        final logId = await txn.insert(_logsTable, {
+        final insertedLogId = await txn.insert(_logsTable, {
           'exercise_time': log.exerciseTime.toIso8601String(),
           'exercise_name': log.exercise.name,
           'exercise_description': log.exercise.description,
           'body_groups': _encodeBodyGroups(log.exercise.bodyGroups),
         });
+        logId = insertedLogId;
 
         for (var i = 0; i < log.sets.length; i++) {
           final set = log.sets[i];
-          await txn.insert(_setsTable, {
-            'log_id': logId,
+          final insertedSetId = await txn.insert(_setsTable, {
+            'log_id': insertedLogId,
             'set_order': i,
             'reps': set.reps,
             'weight': set.weight.toDouble(),
           });
+          set.id = insertedSetId;
         }
       });
+      return logId;
     } catch (error) {
       debugPrint('SQLite insert failed: $error');
+      return null;
+    }
+  }
+
+  @override
+  Future<void> addSet(int logId, ExerciseSet set) async {
+    final db = await _database();
+    try {
+      await db.transaction((txn) async {
+        final nextSetOrderRow = await txn.rawQuery(
+          '''
+          SELECT COALESCE(MAX(set_order), -1) + 1 AS next_set_order
+          FROM $_setsTable
+          WHERE log_id = ?
+          ''',
+          [logId],
+        );
+
+        final nextSetOrder = nextSetOrderRow.isEmpty
+            ? 0
+            : _asInt(nextSetOrderRow.first['next_set_order']);
+        final insertedSetId = await txn.insert(_setsTable, {
+          'log_id': logId,
+          'set_order': nextSetOrder,
+          'reps': set.reps,
+          'weight': set.weight.toDouble(),
+        });
+        set.id = insertedSetId;
+      });
+    } catch (error) {
+      debugPrint('SQLite add set failed: $error');
     }
   }
 
@@ -88,6 +124,19 @@ class SqliteController implements Persistence {
             FOREIGN KEY(log_id) REFERENCES $_logsTable(id) ON DELETE CASCADE
           )
         ''');
+
+        await database.execute('''
+          CREATE UNIQUE INDEX $_setsOrderIndex
+          ON $_setsTable(log_id, set_order)
+        ''');
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await database.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS $_setsOrderIndex
+            ON $_setsTable(log_id, set_order)
+          ''');
+        }
       },
     );
   }
@@ -102,9 +151,12 @@ class SqliteController implements Persistence {
     final setsByLogId = <int, List<ExerciseSet>>{};
     for (final setRow in setRows) {
       final logId = _asInt(setRow['log_id']);
+      final setId = _asInt(setRow['id']);
       final reps = _asInt(setRow['reps']);
       final weight = _asNum(setRow['weight']);
-      setsByLogId.putIfAbsent(logId, () => []).add(ExerciseSet(reps, weight));
+      setsByLogId
+          .putIfAbsent(logId, () => [])
+          .add(ExerciseSet(reps, weight, id: setId));
     }
 
     return logRows.map((logRow) {
@@ -118,6 +170,7 @@ class SqliteController implements Persistence {
         _parseDateTime(logRow['exercise_time']),
         exercise,
         setsByLogId[logId] ?? <ExerciseSet>[],
+        id: logId,
       );
     }).toList();
   }
