@@ -1,10 +1,13 @@
 import 'package:flutter/cupertino.dart';
+import 'package:gym_tracker/controllers/firestore_controller.dart';
 import 'package:gym_tracker/controllers/persistence.dart';
-import 'package:gym_tracker/controllers/sqlite_controller.dart';
 import 'package:gym_tracker/models/exercise_log.dart';
 
 class ExerciseLogProvider extends ChangeNotifier {
-  Persistence dataSource = SqliteController();
+  Persistence dataSource;
+
+  ExerciseLogProvider({Persistence? dataSource})
+    : dataSource = dataSource ?? FirestoreController();
 
   /// Adds [item] to the log. This and [removeAll] are the only ways to modify the
   /// cart from the outside.
