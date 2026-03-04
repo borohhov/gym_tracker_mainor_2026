@@ -54,23 +54,23 @@ class _ExerciseLogEntryFormState extends State<ExerciseLogEntryForm> {
             // Exercise label
             Text(
               'Exercise',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
 
             DropdownButtonFormField<Exercise>(
-              value: _selected,
+              initialValue: _selected,
               isExpanded: true,
               decoration: _fieldDecoration(context, 'Exercise name'),
               items: defaultExercises
                   .map(
                     (ex) => DropdownMenuItem<Exercise>(
-                  value: ex,
-                  child: Text(ex.name),
-                ),
-              )
+                      value: ex,
+                      child: Text(ex.name),
+                    ),
+                  )
                   .toList(),
               validator: (value) {
                 if (value == null) return 'Please select an exercise';
@@ -84,9 +84,9 @@ class _ExerciseLogEntryFormState extends State<ExerciseLogEntryForm> {
             // Sets header
             Text(
               'First set',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
 
@@ -148,14 +148,14 @@ class _ExerciseLogEntryFormState extends State<ExerciseLogEntryForm> {
                   final reps = int.parse(_repsController.text);
                   final weight = num.parse(_weightController.text);
 
-                  exerciseLog = ExerciseLog(
-                    DateTime.now(),
-                    _selected!,
-                    [ExerciseSet(reps, weight)],
-                  );
+                  exerciseLog = ExerciseLog(DateTime.now(), _selected!, [
+                    ExerciseSet(reps, weight),
+                  ]);
 
-                  Provider.of<ExerciseLogProvider>(context, listen: false)
-                      .add(exerciseLog);
+                  Provider.of<ExerciseLogProvider>(
+                    context,
+                    listen: false,
+                  ).add(exerciseLog);
 
                   if (!mounted) return;
                   Navigator.of(context).pop();

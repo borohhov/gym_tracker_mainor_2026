@@ -1,30 +1,57 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:gym_tracker/main.dart';
+import 'package:gym_tracker/controllers/exercise_log_provider.dart';
+import 'package:gym_tracker/controllers/persistence.dart';
+import 'package:gym_tracker/models/default_exercises.dart';
+import 'package:gym_tracker/models/exercise_log.dart';
+import 'package:gym_tracker/theme/app_theme.dart';
+import 'package:gym_tracker/views/home.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/material.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Home screen renders themed stats and log count', (
+    WidgetTester tester,
+  ) async {
+    final provider = ExerciseLogProvider();
+    provider.dataSource = _FakePersistence([
+      ExerciseLog(DateTime.now(), defaultExercises.first, [
+        ExerciseSet(8, 40),
+        ExerciseSet(8, 45),
+      ]),
+    ]);
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: MaterialApp(theme: AppTheme.darkTheme, home: const HomeScreen()),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Exercises'), findsOneWidget);
+    expect(find.text('Sets'), findsOneWidget);
+    expect(find.textContaining('exercise logged'), findsOneWidget);
+    expect(find.text(defaultExercises.first.name), findsOneWidget);
   });
+}
+
+class _FakePersistence implements Persistence {
+  _FakePersistence(this._logs);
+
+  final List<ExerciseLog> _logs;
+
+  @override
+  Future<List<ExerciseLog>> getAllLogs() async {
+    return _logs;
+  }
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<void> saveLog(ExerciseLog log) async {
+    _logs.add(log);
+  }
 }

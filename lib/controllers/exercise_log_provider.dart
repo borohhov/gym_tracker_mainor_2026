@@ -1,5 +1,3 @@
-import 'dart:collection';
-
 import 'package:flutter/cupertino.dart';
 import 'package:gym_tracker/controllers/persistence.dart';
 import 'package:gym_tracker/controllers/sqlite_controller.dart';
