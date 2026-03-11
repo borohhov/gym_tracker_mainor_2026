@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:gym_tracker/controllers/auth_provider.dart';
 import 'package:gym_tracker/controllers/exercise_log_provider.dart';
 import 'package:gym_tracker/models/exercise_log.dart';
 import 'package:gym_tracker/theme/app_theme.dart';
+import 'package:gym_tracker/views/auth_sheet.dart';
 import 'package:gym_tracker/views/exercise_log_list.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +16,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final appColors = Theme.of(context).extension<AppColors>()!;
     final textTheme = Theme.of(context).textTheme;
+    final authProvider = context.watch<AuthProvider>();
 
     return Scaffold(
       body: Container(
@@ -29,11 +32,11 @@ class HomeScreen extends StatelessWidget {
             final items = _todayLogs(allLogs);
             final setsCount = items.fold<int>(
               0,
-              (count, log) => count + log.sets.length,
+                  (count, log) => count + log.sets.length,
             );
             final volume = items.fold<num>(
               0,
-              (sum, log) => sum + _volumeFor(log),
+                  (sum, log) => sum + _volumeFor(log),
             );
 
             return SafeArea(
@@ -46,12 +49,47 @@ class HomeScreen extends StatelessWidget {
                       children: [
                         Text('Today', style: textTheme.headlineMedium),
                         const Spacer(),
-                        IconButton(
-                          onPressed: () {},
-                          icon: const Icon(Icons.more_vert_rounded),
-                          splashRadius: 22,
+                        PopupMenuButton<String>(
+                          onSelected: (value) async {
+                            if (value == 'auth') {
+                              _showAuthSheet(context);
+                            }
+
+                            if (value == 'logout') {
+                              await context.read<AuthProvider>().logout();
+                              await context
+                                  .read<ExerciseLogProvider>()
+                                  .useGuestMode();
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Logged out'),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            if (!authProvider.isLoggedIn)
+                              const PopupMenuItem(
+                                value: 'auth',
+                                child: Text('Sign in / Register'),
+                              ),
+                            if (authProvider.isLoggedIn)
+                              const PopupMenuItem(
+                                value: 'logout',
+                                child: Text('Log out'),
+                              ),
+                          ],
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    _AccountStatusCard(
+                      isLoggedIn: authProvider.isLoggedIn,
+                      email: authProvider.email,
                     ),
                     const SizedBox(height: 24),
                     Row(
@@ -93,11 +131,11 @@ class HomeScreen extends StatelessWidget {
                       child: items.isEmpty
                           ? const _EmptyStateCard()
                           : ExerciseLogListWidget(
-                              exerciseLog: items,
-                              onAddSetPressed: (log) {
-                                _showAddSetDialog(context, log);
-                              },
-                            ),
+                        exerciseLog: items,
+                        onAddSetPressed: (log) {
+                          _showAddSetDialog(context, log);
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -140,6 +178,14 @@ class HomeScreen extends StatelessWidget {
           child: const Icon(Icons.add),
         ),
       ),
+    );
+  }
+
+  void _showAuthSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const AuthSheet(),
     );
   }
 
@@ -247,22 +293,20 @@ class HomeScreen extends StatelessWidget {
               ),
               FilledButton(
                 onPressed: () async {
-                  if (!formKey.currentState!.validate()) {
-                    return;
-                  }
-                  final reps = int.parse(repsController.text.trim());
-                  final weight = num.parse(weightController.text.trim());
-                  await dialogContext.read<ExerciseLogProvider>().addSet(
+                  if (!formKey.currentState!.validate()) return;
+
+                  await context.read<ExerciseLogProvider>().addSet(
                     logId,
-                    ExerciseSet(reps, weight),
+                    ExerciseSet(
+                      int.parse(repsController.text.trim()),
+                      num.parse(weightController.text.trim()),
+                    ),
                   );
 
-                  if (!dialogContext.mounted) {
-                    return;
-                  }
+                  if (!dialogContext.mounted) return;
                   Navigator.of(dialogContext).pop();
                 },
-                child: const Text('Save Set'),
+                child: const Text('Save'),
               ),
             ],
           );
@@ -275,8 +319,51 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+class _AccountStatusCard extends StatelessWidget {
+  const _AccountStatusCard({
+    required this.isLoggedIn,
+    required this.email,
+  });
+
+  final bool isLoggedIn;
+  final String? email;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isLoggedIn ? Icons.verified_user_outlined : Icons.person_outline,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              isLoggedIn
+                  ? 'Signed in${email != null ? ' • $email' : ''}'
+                  : 'Guest mode',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.label, required this.value, this.unit});
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    this.unit,
+  });
 
   final String label;
   final String value;
@@ -288,46 +375,39 @@ class _MetricCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return Container(
-      height: 146,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
-        color: appColors.surface.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: appColors.border),
+        color: appColors.surface.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: appColors.border.withValues(alpha: 0.25),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: textTheme.bodyLarge?.copyWith(
-              color: appColors.textSecondary,
-            ),
-          ),
+          Text(label, style: textTheme.labelLarge),
+          const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Flexible(
                 child: Text(
                   value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: appColors.textPrimary,
+                    fontWeight: FontWeight.w700,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (unit != null) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.only(bottom: 3),
                   child: Text(
                     unit!,
-                    style: textTheme.titleMedium?.copyWith(
+                    style: textTheme.labelMedium?.copyWith(
                       color: appColors.textSecondary,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -349,20 +429,39 @@ class _EmptyStateCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       decoration: BoxDecoration(
-        color: appColors.surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: appColors.border),
+        color: appColors.surface.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: appColors.border.withValues(alpha: 0.25),
+        ),
       ),
-      padding: const EdgeInsets.all(22),
-      child: Center(
-        child: Text(
-          'Tap + to add your first exercise',
-          style: textTheme.titleMedium?.copyWith(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.fitness_center_outlined,
+            size: 42,
             color: appColors.textSecondary,
           ),
-          textAlign: TextAlign.center,
-        ),
+          const SizedBox(height: 14),
+          Text(
+            'Nothing logged for today yet',
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap the + button to add your first exercise.',
+            textAlign: TextAlign.center,
+            style: textTheme.bodyMedium?.copyWith(
+              color: appColors.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -5,24 +5,31 @@ import 'package:gym_tracker/models/exercise.dart';
 import 'package:gym_tracker/models/exercise_log.dart';
 
 class FirestoreController implements Persistence {
+  static const _usersCollection = 'users';
   static const _logsCollection = 'exercise_logs';
-  static const _metaCollection = '_meta';
+  static const _metaCollection = 'meta';
   static const _counterDocument = 'counters';
   static const _nextLogIdField = 'next_log_id';
 
   final FirebaseFirestore? _providedFirestore;
+  final String userId;
 
-  FirestoreController({FirebaseFirestore? firestore})
-    : _providedFirestore = firestore;
+  FirestoreController({
+    required this.userId,
+    FirebaseFirestore? firestore,
+  }) : _providedFirestore = firestore;
 
   FirebaseFirestore get _firestore =>
       _providedFirestore ?? FirebaseFirestore.instance;
 
+  DocumentReference<Map<String, dynamic>> get _userDoc =>
+      _firestore.collection(_usersCollection).doc(userId);
+
   CollectionReference<Map<String, dynamic>> get _logs =>
-      _firestore.collection(_logsCollection);
+      _userDoc.collection(_logsCollection);
 
   DocumentReference<Map<String, dynamic>> get _counterRef =>
-      _firestore.collection(_metaCollection).doc(_counterDocument);
+      _userDoc.collection(_metaCollection).doc(_counterDocument);
 
   @override
   Future<void> init() async {
@@ -34,11 +41,13 @@ class FirestoreController implements Persistence {
     try {
       return await _firestore.runTransaction<int>((transaction) async {
         final logId = await _nextLogId(transaction);
+
         final sets = <Map<String, dynamic>>[];
         for (var i = 0; i < log.sets.length; i++) {
           final set = log.sets[i];
           final setId = i + 1;
           set.id = setId;
+
           sets.add({
             'id': setId,
             'set_order': i,
@@ -55,6 +64,7 @@ class FirestoreController implements Persistence {
           'body_groups': _encodeBodyGroups(log.exercise.bodyGroups),
           'sets': sets,
         });
+
         return logId;
       });
     } catch (error) {
@@ -69,26 +79,30 @@ class FirestoreController implements Persistence {
       await _firestore.runTransaction((transaction) async {
         final logRef = _logs.doc(logId.toString());
         final snapshot = await transaction.get(logRef);
+
         if (!snapshot.exists) {
           return;
         }
 
         final data = snapshot.data() ?? <String, dynamic>{};
         final existingSets = _extractSetMaps(data['sets']);
+
         final nextSetOrder = existingSets.isEmpty
             ? 0
             : existingSets
-                      .map((entry) => _asInt(entry['set_order']))
-                      .reduce((a, b) => a > b ? a : b) +
-                  1;
+            .map((entry) => _asInt(entry['set_order']))
+            .reduce((a, b) => a > b ? a : b) +
+            1;
+
         final nextSetId = existingSets.isEmpty
             ? 1
             : existingSets
-                      .map((entry) => _asInt(entry['id']))
-                      .reduce((a, b) => a > b ? a : b) +
-                  1;
+            .map((entry) => _asInt(entry['id']))
+            .reduce((a, b) => a > b ? a : b) +
+            1;
 
         set.id = nextSetId;
+
         existingSets.add({
           'id': nextSetId,
           'set_order': nextSetOrder,
@@ -112,6 +126,7 @@ class FirestoreController implements Persistence {
   Future<int> _nextLogId(Transaction transaction) async {
     final counterSnapshot = await transaction.get(_counterRef);
     final nextLogId = _asInt(counterSnapshot.data()?[_nextLogIdField], 1);
+
     transaction.set(_counterRef, {_nextLogIdField: nextLogId + 1});
     return nextLogId;
   }
@@ -119,14 +134,15 @@ class FirestoreController implements Persistence {
   ExerciseLog _mapLog(QueryDocumentSnapshot<Map<String, dynamic>> snapshot) {
     final data = snapshot.data();
     final logId = _asInt(data['id']);
+
     final exercise = Exercise(
       (data['exercise_name'] as String?) ?? '',
       data['exercise_description'] as String?,
       _decodeBodyGroups(data['body_groups']),
     );
-    final sets = _extractSetMaps(
-      data['sets'],
-    )..sort((a, b) => _asInt(a['set_order']).compareTo(_asInt(b['set_order'])));
+
+    final sets = _extractSetMaps(data['sets'])
+      ..sort((a, b) => _asInt(a['set_order']).compareTo(_asInt(b['set_order'])));
 
     return ExerciseLog(
       _parseDateTime(data['exercise_time']),
@@ -134,11 +150,11 @@ class FirestoreController implements Persistence {
       sets
           .map(
             (entry) => ExerciseSet(
-              _asInt(entry['reps']),
-              _asNum(entry['weight']),
-              id: _asInt(entry['id']),
-            ),
-          )
+          _asInt(entry['reps']),
+          _asNum(entry['weight']),
+          id: _asInt(entry['id']),
+        ),
+      )
           .toList(),
       id: logId,
     );
@@ -159,6 +175,7 @@ class FirestoreController implements Persistence {
       if (groupName == null || groupName.isEmpty) {
         continue;
       }
+
       for (final group in BodyGroup.values) {
         if (group.name == groupName) {
           bodyGroups.add(group);
@@ -166,6 +183,7 @@ class FirestoreController implements Persistence {
         }
       }
     }
+
     return bodyGroups;
   }
 
@@ -178,30 +196,20 @@ class FirestoreController implements Persistence {
         .whereType<Map>()
         .map(
           (entry) => entry.map((key, value) => MapEntry(key.toString(), value)),
-        )
+    )
         .toList();
   }
 
   int _asInt(Object? value, [int fallback = 0]) {
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    if (value is String) {
-      return int.tryParse(value) ?? fallback;
-    }
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
     return fallback;
   }
 
   num _asNum(Object? value) {
-    if (value is num) {
-      return value;
-    }
-    if (value is String) {
-      return num.tryParse(value) ?? 0;
-    }
+    if (value is num) return value;
+    if (value is String) return num.tryParse(value) ?? 0;
     return 0;
   }
 
@@ -211,13 +219,12 @@ class FirestoreController implements Persistence {
     }
     if (value is String && value.isNotEmpty) {
       final parsed = DateTime.tryParse(value);
-      if (parsed != null) {
-        return parsed;
-      }
+      if (parsed != null) return parsed;
     }
     if (value is int) {
       return DateTime.fromMillisecondsSinceEpoch(value);
     }
+
     return DateTime.fromMillisecondsSinceEpoch(0);
   }
 }

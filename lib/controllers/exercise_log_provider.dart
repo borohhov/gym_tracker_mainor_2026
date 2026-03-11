@@ -3,27 +3,58 @@ import 'package:gym_tracker/controllers/firestore_controller.dart';
 import 'package:gym_tracker/controllers/persistence.dart';
 import 'package:gym_tracker/models/exercise_log.dart';
 
+import 'package:flutter/foundation.dart';
+import 'package:gym_tracker/controllers/firestore_controller.dart';
+import 'package:gym_tracker/controllers/persistence.dart';
+import 'package:gym_tracker/controllers/sqlite_controller.dart';
+import 'package:gym_tracker/models/exercise_log.dart';
+
 class ExerciseLogProvider extends ChangeNotifier {
-  Persistence dataSource;
+  Persistence _dataSource;
+  bool _initialized = false;
 
   ExerciseLogProvider({Persistence? dataSource})
-    : dataSource = dataSource ?? FirestoreController();
+      : _dataSource = dataSource ?? SqliteController();
 
-  /// Adds [item] to the log. This and [removeAll] are the only ways to modify the
-  /// cart from the outside.
+  Persistence get dataSource => _dataSource;
+
+  bool get isUsingFirestore => _dataSource is FirestoreController;
+
+  Future<void> init() async {
+    if (_initialized) return;
+    await _dataSource.init();
+    _initialized = true;
+  }
+
+  Future<void> useGuestMode() async {
+    _dataSource = SqliteController();
+    _initialized = false;
+    await init();
+    notifyListeners();
+  }
+
+  Future<void> useAuthenticatedMode(String uid) async {
+    _dataSource = FirestoreController(userId: uid);
+    _initialized = false;
+    await init();
+    notifyListeners();
+  }
+
   Future<void> add(ExerciseLog item) async {
-    final logId = await dataSource.saveLog(item);
+    await init();
+    final logId = await _dataSource.saveLog(item);
     item.id = logId;
-    // This call tells the widgets that are listening to this model to rebuild.
     notifyListeners();
   }
 
   Future<void> addSet(int logId, ExerciseSet set) async {
-    await dataSource.addSet(logId, set);
+    await init();
+    await _dataSource.addSet(logId, set);
     notifyListeners();
   }
 
   Future<List<ExerciseLog>> getAllLogs() async {
-    return await dataSource.getAllLogs();
+    await init();
+    return _dataSource.getAllLogs();
   }
 }
